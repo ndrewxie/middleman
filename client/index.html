@@ -1,0 +1,23 @@
+ <!doctype html>
+<html>
+    <head>
+        <title>Rewriter</title>
+        <link rel="stylesheet" href="./style.css">
+    </head>
+    <body>
+        <div id="notepad">
+            <div>
+                <label class="text-large">Task: </label>
+                <input type="text" id="todoitem" class="text-large">
+                <button onclick="add_task()" class="text-large">Add task</button>
+            </div>
+            <textarea id="textpad" rows="10" cols="50">Type here...</textarea>
+        </div>
+        <div id="mainpage" class="hidden">
+            <label for="proxurl" id="labelproxurl" class="text-large">URL to re-write: </label>
+            <input type="text" id="proxurl" class="text-large">
+            <button id="runprox" onclick="run_prox()" class="text-large">Re-write</button>
+        </div>
+        <script src="index.js"></script>
+    </body>
+</html>

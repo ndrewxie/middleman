@@ -1,0 +1,41 @@
+* { box-sizing: border-box; }
+
+.text-large {
+    font-family: Verdana, sans-serif;
+    font-size: 20px;
+}
+
+#notepad, #mainpage {
+    margin: 0;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+}
+
+.hidden { display: none !important; }
+
+#labelproxurl {
+    -webkit-user-select: none;        
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+}
+
+button, label {
+    border-radius: 5px;
+}
+
+.task-label:hover {
+    text-decoration: line-through;
+}
+
+#textpad {
+    background-color: #D2B48C;
+}
