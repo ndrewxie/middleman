@@ -2,27 +2,19 @@ import * as fs from 'fs';
 import * as ws from 'ws';
 import * as http from 'http';
 import * as https from 'https';
-import * as urls from './rewriting/urls.mjs';
+import * as urls from './hooks/urls.mjs';
+import * as hook from './hooks/build.mjs';
+import * as headers from './headers.mjs';
 import { ContentRewriter } from './rewriting/rewriter.mjs';
 import { guess_mime } from './mimes.mjs';
 process.env['NODE_TLS_REJECT_UNAUTHORIZED'] = 0;
 
+await hook.build();
+
 let static_server = http.createServer(function (req, res) {
-    if (req.url.includes('/reqs/')) {
+    if (req.url.includes('/q/')) {
         try {
-            let path = req.url.split('/');
-            path.splice(0, 2);
-            let request_url = 'https://www.example.com';
-            for (let j = 0; j < path.length; j++) {
-                request_url = new URL(urls.decode_url(path[j]), request_url).href;
-            }
-            let base_url = (!!path[0]) ? urls.decode_url(path[0]) : 'https://www.example.com';
-            
-            let headers = {};
-            try {
-                headers = get_headers(req.headers, base_url);
-            } catch (e) {}
-            make_request(request_url, headers, req.method, res);
+            make_request(req, res);
         }
         catch (e) {
             console.log("Error in initial processing of " + req.url);
@@ -48,11 +40,12 @@ let static_server = http.createServer(function (req, res) {
 });
 
 const redirect_codes = [301, 302, 303, 307, 308];
-function make_request(requested_url, headers, method, res) {
+function make_request(req, res) {
+    let requested_url = urls.decode_url(req.url);
     let protocol = new URL(requested_url).protocol;
     let options = {
-        method: method,
-        headers: headers
+        method: req.method,
+        headers: headers.get_headers(req.url, req.headers)
     };
     let requester = undefined;
     if (protocol == 'http:') {
@@ -67,18 +60,20 @@ function make_request(requested_url, headers, method, res) {
         throw new Error("Unsupported protocol: " + protocol);
     }
     
-    let req = requester.request(requested_url, options,
-        (requested_data) => { process_res(requested_data, res, requested_url, options) }
+    let resource_request = requester.request(requested_url, options,
+        (requested_data) => { process_res(requested_data, res, requested_url); }
     );
-    req.on('error', e => {
+    req.on('data', (chunk) => { resource_request.write(chunk); });
+    req.on('end', () => { resource_request.end(); });
+    req.on('close', () => { resource_request.end(); });
+    resource_request.on('error', e => {
         console.log('Failed in make_request: ' + e.message + ': ');
         console.log(options.method + ': ' + requested_url);
         res.statusCode = 404;
         res.end();
     });
-    req.end();
 }
-function process_res(requested_data, res, requested_url, options) {
+function process_res(requested_data, res, requested_url) {
     try {
         if (redirect_codes.includes(requested_data.statusCode)) {
             let encoded_redirect = urls.encode_url(requested_data.headers['location']);
@@ -88,20 +83,26 @@ function process_res(requested_data, res, requested_url, options) {
             res.end();
             return;
         }
-        
-        let content_type = requested_data.headers['content-type'];
-        if (content_type) { res.setHeader('Content-Type', content_type); }
+
+        let response_headers = headers.get_response_headers(
+            requested_data.headers,
+            function(content_type) {
+                return content_type && (
+                    content_type.includes('html') ||
+                    content_type.includes('css') ||
+                    content_type.includes('javascript')
+                );
+            }
+        );
+        for (const header in response_headers.headers) {
+            res.setHeader(header, response_headers.headers[header]);
+        }
         res.writeHead(requested_data.statusCode);
 
         let transformer = undefined;
-        if (content_type && (
-            content_type.includes('html') ||
-            content_type.includes('css') ||
-            content_type.includes('javascript')
-        )) {
-            content_type = content_type.toLowerCase();
+        if (response_headers.is_rewritten) {
             transformer = new ContentRewriter(
-                content_type, 
+                response_headers.content_type, 
                 function(chunk) { res.write(chunk); }, 
                 function() { res.end(); }, 
                 function(e) {
@@ -123,39 +124,6 @@ function process_res(requested_data, res, requested_url, options) {
         res.statusCode = 404;
         res.end();
     }
-}
-
-let proxy_skip_headers = [
-    'host',
-    'referer',
-    'origin',
-    'accept-encoding',
-    'x-forwarded-for',
-    'x-forwarded-proto',
-    'x-replit-user-id',
-    'x-replit-user-name',
-    'x-replit-user-roles'
-]
-function get_headers(input, base_url) {
-    let to_return = {};
-    for (const key in input) {
-        let to_copy = true;
-        for (let j = 0; j < proxy_skip_headers.length; j++) {
-            if (key.toLowerCase() == proxy_skip_headers[j].toLowerCase()) {
-                to_copy = false;
-                break;
-            }
-        }
-        if (to_copy) {
-            to_return[key] = input[key];
-        }
-    }
-    
-    let base_info = new URL(base_url);
-    to_return['Referer'] = base_info.href;
-    to_return['Origin'] = base_info.origin;
-    
-    return to_return;
 }
 
 let websocket_server = new ws.WebSocketServer({

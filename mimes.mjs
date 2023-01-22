@@ -8,6 +8,7 @@ const mimes = {
     'png': 'image/png',
     'jpeg': 'image/jpeg',
     'jpg': 'image/jpeg',
+    'mp4': 'video/mp4',
     'json': 'application/json',
     'txt': 'text/plain',
     'rs': 'text/plain',

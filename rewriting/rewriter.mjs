@@ -1,7 +1,7 @@
 import { Worker } from 'worker_threads';
 
-let NUM_WORKERS = 5;
-let MAX_WORKER_TIME = 15000;
+let NUM_WORKERS = 12;
+let MAX_WORKER_TIME = 30000;
 let WORKER_PATH = './rewriting/rewriter_worker.mjs';
 
 let queue = [];
@@ -39,9 +39,7 @@ export class ContentRewriter {
 
 function init_worker(worker_obj) {
     let on_error = function(error) {
-        console.log("ERROR");
-        console.log(error.stack);
-        console.log(error.message);
+        console.log("Error in worker");
         if (worker_obj.assigned_rewriter) { worker_obj.assigned_rewriter.on_error(error); }
         worker_obj.assigned_rewriter = undefined;
         worker_obj.worker = new Worker(WORKER_PATH);

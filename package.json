@@ -12,6 +12,7 @@
   "dependencies": {
     "@types/node": "^18.0.6",
     "node-fetch": "^3.2.6",
-    "ws": "^8.10.0"
+    "ws": "^8.10.0",
+    "esbuild": "^0.17.3"
   }
 }

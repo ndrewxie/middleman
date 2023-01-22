@@ -3,9 +3,21 @@ import { HTMLRewriter } from './html_rewriter.mjs';
 import { CSSRewriter } from './css_rewriter.mjs';
 import { JSRewriter } from './js_rewriter.mjs';
 
-
 let rewrite_type = undefined;
-parentPort.on('message', (message) => {
+parentPort.on('message', (msg) => {
+    try {
+        return on_message(msg);
+    }
+    catch(e) {
+        console.log("REWRITE ERROR=================");
+        console.log(e.message);
+        console.log(e.stack);
+        console.log("/REWRITE ERROR=================");
+        throw e;
+    }
+});
+
+function on_message(message) {
     if (message instanceof Array) {
         if (message[0] == 'rewrite_request') { rewrite_type = message[1]; }
     }
@@ -28,7 +40,6 @@ parentPort.on('message', (message) => {
             parentPort.postMessage(['end']);
             return;
         }
-    
         let rewritten = Buffer.from(rewriter.rewrite(), 'utf-8');        
         let rewritten_u8 = new Uint8Array(
             rewritten.buffer,
@@ -38,4 +49,4 @@ parentPort.on('message', (message) => {
         parentPort.postMessage(rewritten_u8, [rewritten_u8.buffer]);
         parentPort.postMessage(['end']);
     }
-});
+}

@@ -1,5 +1,5 @@
 import {TextStream, is_whitespace} from './utility.mjs';
-import * as urls from './urls.mjs';
+import * as urls from '../hooks/urls.mjs';
 import * as fs from 'fs';
 
 // ignores case, skips trailing whitespace

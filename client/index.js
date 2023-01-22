@@ -11,7 +11,7 @@ function run_prox() {
 	}
 
 	let encoded_target = encodeURIComponent(btoa(target_url));
-	let to_redirect = new URL('/reqs/' + encoded_target + '/', window.location.href);
+	let to_redirect = new URL('/q/' + encoded_target + '/', window.location.href);
 	window.location.href = to_redirect.href;
 }
 

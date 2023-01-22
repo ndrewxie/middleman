@@ -2,15 +2,18 @@ import { readFileSync } from 'fs';
 
 import assert from 'assert';
 import { TextStream, is_whitespace } from './utility.mjs';
-import * as urls from './urls.mjs';
-import { hook } from './hook.mjs';
+import * as urls from '../hooks/urls.mjs';
+import { get_hook } from '../hooks/build.mjs';
+
+import * as js_rewriter from './js_rewriter.mjs';
+import * as css_rewriter from './css_rewriter.mjs';
 
 const TAG_NAME_CHARACTERS = 'abcdefghijklmnopqrstuvwxyz0123456789-_!';
 const BANNED_ATTR_WORD_VALUE_CHARS = '"\'=<>`';
 const BANNED_ATTR_NAME_CHARS = '/<>"\'=';
 const RAW_TAGS = ['script', 'style'];
 
-const PROXY_ATTRIBS = ['href', 'src'];
+const PROXY_ATTRIBS = [['href', undefined], ['src', undefined], ['action', 'form']];
 const REMOVE_ATTRIBS = ['integrity', 'nonce'];
 
 function is_tag_name_end(input) {
@@ -45,7 +48,7 @@ export class HTMLRewriter {
     }
     handle_tag_attrib(tag_name, attrib_name, attrib_value) {
         if (typeof attrib_value == 'undefined') { return; }
-        let name = tag_name.data();
+        let name = tag_name.data().toLowerCase();
         let attrib = attrib_name.data().toLowerCase();
         let value = attrib_value.data();
 
@@ -56,7 +59,11 @@ export class HTMLRewriter {
                 text: ''
             });
         }
-        if (PROXY_ATTRIBS.includes(attrib)) {
+        for (const proxy_attrib of PROXY_ATTRIBS) {
+            if (proxy_attrib[0] != attrib) { continue; }
+            if (typeof proxy_attrib[1] != 'undefined') {
+                if (name != proxy_attrib[1]) { continue; }
+            }
             let quote = '';
             if ((value[0] == '"') && (value.slice(-1) == '"')) { quote = '"'; }
             if ((value[0] == "'") && (value.slice(-1) == "'")) { quote = "'"; }
@@ -74,24 +81,39 @@ export class HTMLRewriter {
         while (!this.input.is_empty()) {
             if (this.expect_comment()) { continue; }
             if (this.expect_cdata()) { continue; }
-            let tag_open = force_tagname ? undefined : this.expect_tag_open();
-            if (typeof tag_open != 'undefined') {
-                let tag_name = tag_open.data().toLowerCase();
-                if (RAW_TAGS.includes(tag_name)) {
-                    force_tagname = tag_name;
+            if (typeof force_tagname == 'undefined') {
+                let tag_open = this.expect_tag_open();
+                if (typeof tag_open != 'undefined') {
+                    let tag_name = tag_open.data().toLowerCase();
+                    if (RAW_TAGS.includes(tag_name)) {
+                        force_tagname = [tag_name, this.input.mark()];
+                    }
+                    if (tag_name == 'head') {
+                        this.rewrites.push({
+                            from: this.input.mark(),
+                            to: this.input.mark(),
+                            text: get_hook()
+                        });
+                    }
+                    continue;
                 }
-                if (tag_name == 'head') {
-                    this.rewrites.push({
-                        from: this.input.mark(),
-                        to: this.input.mark(),
-                        text: hook
-                    });
-                }
-                continue;
             }
-            if (this.expect_tag_close(force_tagname)) {
-                force_tagname = undefined;
-                continue;
+            else {
+                let force_tagcontent_end = this.input.mark();
+                if (this.expect_tag_close(force_tagname[0])) {
+                    let force_tagcontent = this.input.slice(force_tagname[1], force_tagcontent_end).data();
+                    if (force_tagname[0] == 'script') {
+                        force_tagcontent = (new js_rewriter.JSRewriter(force_tagcontent)).rewrite();
+                    }
+                    // TODO: implement CSS rewriting
+                    this.rewrites.push({
+                        from: force_tagname[1],
+                        to: force_tagcontent_end,
+                        text: force_tagcontent
+                    });
+                    force_tagname = undefined;
+                    continue;
+                }
             }
             this.input.next();
         }
@@ -145,9 +167,9 @@ export class HTMLRewriter {
             let attrib_value = undefined;
             // If key-value pair
             if (reader.expect_pattern(['='], { skip_ws: true })) {
-                attrib_value = reader.expect_string('"', '"', true, true);
+                attrib_value = reader.expect_string('"', '"', false, true);
                 if (typeof attrib_value == 'undefined') {
-                    attrib_value = reader.expect_string('\'', '\'', true, true);
+                    attrib_value = reader.expect_string('\'', '\'', false, true);
                 }
                 if (typeof attrib_value == 'undefined') {
                     attrib_value = reader.expect_until_criterion(is_invalid_attrib_wordvalue_char);
@@ -183,7 +205,6 @@ export class HTMLRewriter {
 }
 
 (function() {
-    return;
     let rewriter = new HTMLRewriter(`
          <!--this is a very long comment, and should probably???? work-->
          <script src="thisisadummylink" async>
@@ -204,6 +225,7 @@ export class HTMLRewriter {
     assert(rewriter.expect_tag_close());
     assert(rewriter.expect_tag_close('SCRIPT'));
     assert(rewriter.expect_tag_open().data() == 'script');
+    assert(rewriter.expect_tag_open().data() == 'adsf');
     assert(rewriter.expect_tag_close('script'));
 })();
 (function() {
@@ -251,8 +273,10 @@ export class HTMLRewriter {
 })();
 (function() {
     return;
-    let data = readFileSync('./parser/test.html', { encoding: 'utf8' });
+    console.log("START");
+    let data = readFileSync('output.html', { encoding: 'utf8' });
     let rewriter = new HTMLRewriter(data);
+    rewriter.rewrite();
     //console.log(rewriter.rewrite());
     console.log("DONE");
 })();

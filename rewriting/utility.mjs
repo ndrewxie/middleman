@@ -25,6 +25,9 @@ export class Slice {
     data() {
         return this.stream.substring(this.from, this.to);
     }
+    clone() {
+        return new Slice(this.from, this.to, this.stream);
+    }
 }
 export class TextStream {
     constructor(input) {
@@ -37,7 +40,7 @@ export class TextStream {
         return this.input.substring(this.index);
     }
     context() {
-        return this.input.substring(Math.max(0, this.index - 100), Math.min(this.input.length, this.index + 100));
+        return this.input.substring(Math.max(0, this.index), Math.min(this.input.length, this.index + 100));
     }
     length() { return this.input.length; }
     substring(start, end) { return this.input.substring(start, end); }
@@ -91,7 +94,7 @@ export class TextStream {
             }
             this.next();
         }
-        return undefined;
+        return this.slice(start, this.mark());
     }
     skip_ws() {
         return this.expect_until_criterion((ch) => { return !is_whitespace(ch); });
@@ -130,32 +133,26 @@ export class TextStream {
     /// Has the option to allow escaping, with only the backslash character being supported.
     /// Has the option to skip leading whitespace
     expect_string(start_token, end_token, can_escape=true, skip_leading_whitespace=false) {
-        if (skip_leading_whitespace) { this.skip_ws(); }
-        let start = this.save();
-        if (!this.expect_pattern([start_token], {})) {
+        this.save();
+        let start = this.mark();
+        if (!this.expect_pattern([start_token], { skip_ws: skip_leading_whitespace })) {
             return this.restore_return(undefined);
         }
-        let end = undefined;
+
         let is_escaped = false;
         while (!this.is_empty()) {
-            // If is end:
+            if (is_escaped) {
+                is_escaped = false;
+                this.next();
+                continue;
+            }
             if (this.expect_pattern([end_token], {})) {
-                if (!is_escaped) {
-                    end = this.mark();
-                    break;
-                }
-                is_escaped = false;
+                return this.pop_return(this.slice(start, this.mark()));
             }
-            else if (can_escape && (this.at() == '\\')) {
-                is_escaped = !is_escaped;
-            }
-            else {
-                is_escaped = false;
+            if (can_escape && (this.at() == '\\')) {
+                is_escaped = true;
             }
             this.next();
-        }
-        if (typeof end != 'undefined') {
-            return this.pop_return(this.slice(start, end));
         }
         return this.restore_return(undefined);
     }
@@ -200,6 +197,8 @@ export class TextStream {
     assert(text_stream_a.expect_string('"', '"').data() == '"asd\'fggg"');
     let text_stream_b = new TextStream('"asdf\\"fffff"');
     assert(text_stream_b.expect_string('"', '"').data() == '"asdf\\"fffff"');
+    let text_stream_c = new TextStream('[\\\\.*+^$?{}|()[\\]]aaaaaaaaa');
+    assert(text_stream_c.expect_string('[', ']', true).data() == '[\\\\.*+^$?{}|()[\\]]');
 })();
 (function() {
     let text_stream = new TextStream('thisshouldntrunyetASDFoknowthisshouldalsoworkasdfokweshouldkeepgoingasdf stop');
