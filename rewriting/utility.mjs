@@ -46,6 +46,7 @@ export class TextStream {
     substring(start, end) { return this.input.substring(start, end); }
     get_char(indx) { return this.input[indx]; }
     at() { return this.get_char(this.index); }
+    raw_input() { return this.input; }
     
     save() { this.save_queue.push(this.index); return this.index; }
     restore() { this.index = this.save_queue.pop(); }
