@@ -3,22 +3,28 @@ import { readFileSync } from 'fs';
 import { TextStream, is_whitespace } from './utility.mjs';
 import assert from 'assert';
 
-const SUS_ATTRIBUTES = ['href', 'location', 'hostname', 'host', 'pathname', 'protocol', 'reload', 'replace'];
+const SUS_ATTRIBUTES = ['href', 'location', 'hostname', 'host', 'pathname', 'protocol', 'reload', 'replace', 'pushState', 'replaceState'];
 const SANITIZE_STR = 'window.sanitized_access(';
 
 const reserved_keywords = ["break", "case", "catch", "class", "const", "continue", "debugger", "default", "delete", "do", "else", "export", "extends", "false", "finally", "for", "function", "if", "import", "in", "instanceof", "new", "null", "return", "super", "switch", "throw", "true", "try", "typeof", "var", "void", "while", "with", "let", "static", "yield"];
 const identifier_start_chars = /^(?:[a-zA-Z_$])/;
 const identifier_chars = /^(?:[a-zA-Z0-9_$])/;
 const ASSIGNMENT_OPERATORS = ['=', '+=', '-=', '*=', '/=', '%=', '**=', '<<=', '>>=', '>>>=', '&=', '^=', '|=', '&&=', '||=', '??=', '++', '--'];
-const BANNED_PREFIXES = ['++', '--', 'new', '.'];
+// list of prefixes that can't start an access **chain**
+const BANNED_PREFIXES = ['++', '--', 'new', '.', ']', ')', '}'];
 
 export class JSRewriter {
     constructor(input) {
         this.input = new TextStream(input);
         this.rewrites = [];
+        this.is_rewritten = false;
     }
     rewrite() {
         this.parse();
+
+        this.is_rewritten = this.rewrites.length != 0;
+        if (!this.is_rewritten) { return this.input.raw_input(); }
+        
         let acc = '';
         let last_copied_index = 0;
         for (let j = 0; j < this.rewrites.length; j++) {
@@ -66,7 +72,9 @@ export class JSRewriter {
         if (!is_prefix_valid) { return false; }
         if (!is_sus) {
             for (const fallback_rewrite of fallback_rewrites) {
-                let fallback_rewritten = (new JSRewriter(fallback_rewrite.data())).rewrite();
+                let fallback_rewriter = new JSRewriter(fallback_rewrite.data());
+                let fallback_rewritten = fallback_rewriter.rewrite();
+                if (!fallback_rewriter.is_rewritten) { continue; }
                 this.insert_mark(fallback_rewritten, fallback_rewrite.from, fallback_rewrite.to);
             }
             return false;
@@ -264,6 +272,8 @@ export class JSRewriter {
     expect_escape() {
         if (this.expect_regex()) { return true; }
         if (this.expect_backtick_str()) { return true; }
+        //if (this.expect_destructuring_assign()) { return true; }
+        //if (this.expect_weird_minified_for_of_loop()) { return true; }
 
         let reader = this.input;
         let expect_single_quote = reader.expect_string("'", "'", true, false);
@@ -344,10 +354,61 @@ export class JSRewriter {
         }
         return reader.restore_return(false);
     }
+    expect_destructuring_assign() {
+        let reader = this.input;
+        reader.save();
+
+        let start = reader.expect_pattern(['let'], { skip_ws: true });
+        if (!start) {
+            start = reader.expect_pattern(['var'], { skip_ws: true });
+        }
+        if (!start) {
+            start = reader.expect_pattern(['const'], { skip_ws: true });
+        }
+
+        reader.skip_ws();
+        let nested = this.expect_nested('[', ']');
+        if (!nested) {
+            nested = this.expect_nested('{', '}');
+        }
+        if (!nested) { return reader.restore_return(false); }
+
+        let equals = reader.expect_pattern(['='], { skip_ws: true });
+        if (!equals) {
+            return reader.restore_return(false);
+        }
+        return reader.pop_return(true);
+    }
+    // I have no other words. This is beyond weird. The following statement is legal JS:
+    // for (const asdf of[1,2,3,4,5]) {}
+    expect_weird_minified_for_of_loop() {
+        let reader = this.input;
+        reader.save();
+
+        let start = reader.expect_pattern(['for', '('], { skip_ws: true });
+        if (!start) { return reader.restore_return(false); }
+
+        let declaration = reader.expect_pattern(['let'], { skip_ws: true });
+        if (!declaration) {
+            declaration = reader.expect_pattern(['const'], { skip_ws: true });
+        }
+        if (!declaration) {
+            declaration = reader.expect_pattern(['var'], { skip_ws: true });
+        }
+
+        let identifier = this.expect_identifier();
+        if (typeof identifier == 'undefined') { return reader.restore_return(false); }
+
+        let of_statement = reader.expect_pattern(['of'], { skip_ws: true });
+        if (!of_statement) { return reader.restore_return(false); }
+
+        let array = this.expect_nested('[', ']');
+        if (!array) { return reader.restore_return(false); }
+        return reader.pop_return(true);
+    }
 }
 
 (function() {
-    return;
     let rewriter_1 = new JSRewriter(
         '`This is a backtick string. ${"asdf" + `nesting!${5+5}`}`/as[/\\]]d\\/f/'
     );
@@ -368,10 +429,15 @@ export class JSRewriter {
     assert(rewriter_3.expect_dot_access().data() == ".secondProp");
     assert(rewriter_3.expect_indirect_access().data() == "[compute_indirect()[5]]");
     assert(rewriter_3.expect_dot_access().data() == ".fourthProp");
+
+    let rewriter_4 = new JSRewriter('for (const asdf of[1,2,3,4,5]) {}');
+    assert(rewriter_4.expect_weird_minified_for_of_loop() == true);
+
+    let rewriter_5 = new JSRewriter('let [a, b, ...rest]=');
+    assert(rewriter_5.expect_destructuring_assign() == true);
 })();
 
 (function() {
-    return;
     let rewriter_1 = new JSRewriter('do_some_stuff();window.location("bruh").href = "https://www.google.com"');
     assert(
         rewriter_1.rewrite()
@@ -387,6 +453,10 @@ export class JSRewriter {
 })();
 
 (function() {
+    return;
+    let data3 = readFileSync('github.js', { encoding: 'utf8' });
+    let rewriter3 = new JSRewriter(data3);
+    console.log(rewriter3.rewrite());
     return;
     //N=C.currency,S=C.decimal,ba=C.numerals?I0(C.numerals):J0,ea=C.percent||"%";return{format:z,formatPrefix:function(ia,Fa){var Ca=z((ia=wO(ia),ia.type="f",ia));ia=3*Math.max(-8,Math.min(8,Math.floor(jia(Fa)/3)));var Ga=Math.pow(10,-ia),Ka=K0[8+ia/3];return function($a){return Ca(Ga*$a)+Ka}}}}	
     //N=C.currency,S=C.decimal,ba=C.numerals?I0(C.numerals):J0,ea=C.percent||"%";return{format:z,formatPrefix:function(ia,Fa){var Ca=z((ia=wO(ia),ia.type="f",ia));ia=3*Math.max(-8,Math.min(8,Math.floor(jia(Fa)/3)));var Ga=Math.pow(10,-ia),Ka=window.sanitized_access(K0,8+ia/3];return function($a){return Ca(Ga*$a)+Ka}}}}
