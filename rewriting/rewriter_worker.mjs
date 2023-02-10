@@ -1,3 +1,5 @@
+import { writeFileSync } from 'fs';
+
 import { parentPort } from 'worker_threads';
 import { HTMLRewriter } from './html_rewriter.mjs';
 import { CSSRewriter } from './css_rewriter.mjs';
@@ -9,10 +11,15 @@ parentPort.on('message', (msg) => {
         return on_message(msg);
     }
     catch(e) {
-        console.log("REWRITE ERROR=================");
-        console.log(e.message);
-        console.log(e.stack);
-        console.log("/REWRITE ERROR=================");
+        let error_string = 'REWRITE ERROR=================\n' +
+            e.message + '\n' +
+            e.stack + '\n' + 
+            '/REWRITE ERROR=================';
+        writeFileSync('debug.txt', error_string, {
+            encoding: 'utf8',
+            flag: 'a'
+        });
+        console.log(error_string);
         throw e;
     }
 });

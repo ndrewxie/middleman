@@ -43,6 +43,7 @@ export function get_headers(encoded_request_url, input_headers) {
 const rewrite_banned_headers = [
     'content-length',
     'content-range',
+    'x-frame-options',
     'content-security-policy' // bad practice? sure, but nothing sensitive is happening here anyways
 ];
 export function get_response_headers(headers, is_rewrite) {

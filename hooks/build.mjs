@@ -6,7 +6,7 @@ export async function build() {
         entryPoints: ['./hooks/hook.mjs'],
         outdir: './bundled',
         bundle: true,
-        minify: false, // true
+        minify: true, // false
         platform: "browser",
         format: "iife"
     });

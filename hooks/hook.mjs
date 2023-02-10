@@ -1,5 +1,7 @@
 import * as urls from './urls.mjs';
 
+Error.stackTraceLimit = Infinity;
+
 function stringify_type(input) {
     if ((input instanceof URL) || (input instanceof Location)) {
         return { href: input.href, type: 'urlobj' };
@@ -81,7 +83,9 @@ Object.defineProperty(actual_location, 'href', {
         window.location.href = encode_url(input);
     }
 });
+// TODO: Technically not correct (history stack stuff), must fix
 actual_location.replace = function(input) { actual_location.href = input; };
+actual_location.assign = function(input) { actual_location.href = input; } ;
 
 function sanitize_value(input) {
     if ((input == window.location) || (input == document.location)) {
@@ -90,13 +94,53 @@ function sanitize_value(input) {
     return input;
 };
 window.sanitized_access = function(input_obj, input_prop, call_params) {
-    if (typeof call_params === 'undefined') {
-        return sanitize_value(sanitize_value(input_obj)[input_prop]);
-    }
-    else {
+    //try {
+        if (typeof call_params == 'undefined') {
+            return sanitize_value(sanitize_value(input_obj)[input_prop]);
+        }
+        if (input_obj == window.History) {
+            if (input_prop == 'replaceState') {
+                if (typeof call_params[2] != 'undefined') {
+                    call_params[2] = encode_url(call_params[2]);
+                }
+            }
+            if (input_prop == 'pushState') {
+                if (typeof call_params[2] != 'undefined') {
+                    call_params[2] = encode_url(call_params[2]);
+                }
+            }
+        }
         return sanitize_value(input_obj)[input_prop](...call_params);
+    //}
+    /*
+    catch(e) {
+        console.log("======ACCESS ERROR:::::");
+        console.log("In OBJ: ");
+        console.log(input_obj);
+        console.log("In PROP: ");
+        console.log(input_prop);
+        console.log("In PARAMS: ");
+        console.log(call_params);
+        console.log("ACCESS: ");
+        console.log(sanitize_value(input_obj)[input_prop]);
+        console.log("MESSAGE: ");
+        console.log(e.message);
+        console.log("SANITIZE CALL STACK: ");
+        console.log((new Error()).stack);
+        console.log("EXCEPTION CALL STACK: ");
+        console.log(e.stack);
+        console.log("======END ACCESS ERROR:::::");
+        throw e;
     }
+    */
 }
+/*
+window.sanitized_constructor = function(in_constructor, in_arguments) {
+    if (in_constructor == window.Request) {
+    }
+    return new in_constructor(...in_arguments);
+}
+*/
 
 const attributes = ['href', 'src', 'srcset'];
 const special_proxy_targets = [
@@ -263,6 +307,7 @@ window.fetch = function(url, options) {
             if (typeof url[field] == 'undefined') { continue; }
             options_obj[field] = url[field];
         }
+        
         actual_url = new Request(encode_url(url.url), options_obj);
         actual_options = undefined;
     }
@@ -277,6 +322,8 @@ window.fetch = function(url, options) {
 
     return old_fetch(actual_url, actual_options);
 }
+
+window.postMessage = function() {};
 
 /*
 let old_request = window.Request;

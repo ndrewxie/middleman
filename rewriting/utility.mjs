@@ -4,13 +4,39 @@ export function string_eq_nocase(a, b) {
     return a.toLowerCase().trim() == b.toLowerCase().trim();
 }
 export function is_whitespace(input) {
-    if (typeof input == 'undefined') {
+    if (input == undefined) {
         return false;
     }
-    return input.trim() == '';
+    if (input.length <= 0) {
+        return false;
+    }
+    for (let j = 0; j < input.length; j++) {
+        let ch = input[j];
+        let test = 
+            (ch !== ' ') &&
+		    (ch !== '\n') &&
+		    (ch !== '\t') &&
+		    (ch !== '\r') &&
+		    (ch !== '\f') &&
+		    (ch !== '\v') &&
+		    (ch !== '\u00a0') &&
+		    (ch !== '\u1680') &&
+		    (ch !== '\u2000') &&
+		    (ch !== '\u200a') &&
+		    (ch !== '\u2028') &&
+		    (ch !== '\u2029') &&
+		    (ch !== '\u202f') &&
+		    (ch !== '\u205f') &&
+		    (ch !== '\u3000') &&
+		    (ch !== '\ufeff');
+        if (test) {
+            return false;
+        }
+    }
+    return true;
 }
 export function is_newline(input) {
-    if (typeof input == 'undefined') {
+    if (input == undefined) {
         return false;
     }
     return (input == '\n') || (input == '\r') || (input == '\u2028') || (input == '\u2029');
@@ -104,6 +130,29 @@ export class TextStream {
     ///     * ignore_case: ignores case when matching
     ///     * skip_ws: skips whitespace before and between patterns
     expect_pattern(input, options={}) {
+        let indx = this.mark();
+        let remaining_len = this.length();
+        for (let j = 0; j < input.length; j++) {
+            if (!!options.skip_ws) {
+                while ((indx < remaining_len) && is_whitespace(this.get_char(indx))) {
+                    indx += 1;
+                }
+            }
+            let pattern_str = input[j];
+            if (!!options.ignore_case) {
+                pattern_str = pattern_str.toLowerCase();
+            }
+            for (let k = 0; k < pattern_str.length; k++) {
+                if (indx >= remaining_len) { return false; }
+                if (this.get_char(indx) != pattern_str[k]) { return false; }
+                indx += 1;
+            }
+        }
+        this.seek(indx);
+        return true;
+    }
+    /*
+    expect_pattern(input, options={}) {
         this.save();
         for (let j = 0; j < input.length; j++) {
             if (!!options.skip_ws) { this.skip_ws(); }
@@ -114,6 +163,7 @@ export class TextStream {
         }
         return this.pop_return(true);
     }
+    */
     /// Reads until the next space, with the option to skip whitespace
     expect_word(skip_ws=false) {
         if (skip_ws) { this.skip_ws(); }

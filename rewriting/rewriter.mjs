@@ -77,20 +77,34 @@ function assign_worker(worker, rewriter) {
 }
 
 setInterval(function() {
-    for (let j = 0; j < workers.length; j++) {
-        if (queue.length <= 0) { return; }
-        if (typeof workers[j].assigned_rewriter != 'undefined') {
-            if (Date.now() - workers[j].assigned_time <= MAX_WORKER_TIME) {
+    while (queue.length > 0) {
+        let assigned = false;
+        let overtime_worker = undefined;
+        for (let j = 0; j < workers.length; j++) {
+            let worker = workers[j];
+            if (typeof worker.assigned_rewriter != 'undefined') {
+                if (Date.now() - worker.assigned_time >= MAX_WORKER_TIME) {
+                    overtime_worker = j;
+                }
                 continue;
             }
-            // Terminate should emit the exit event on it's own
-            // Until the exit event is triggered, we shall consider the worker
-            // to still be busy, so we do not reset the assigned_rewriter
+            assign_worker(worker, queue.shift());
+            assigned = true;
+            break;
+        }
+        // Already assigned a worker, so moving on to next queue entry
+        if (assigned) { continue; }
+
+        // Can't assign a worker, but we do have a worker that's overtime
+        // We can terminate this worker and then use it in the next iteration
+        // of the loop
+        if (typeof overtime_worker != 'undefined') {
             workers[j].worker.terminate().catch(error => {
                 console.log("Error killing worker: " + error.message);
             });
             continue;
         }
-        assign_worker(workers[j], queue.shift());
+        // Can't assign a worker, and no overtime workers. Quitting
+        break;
     }
 }, 100);

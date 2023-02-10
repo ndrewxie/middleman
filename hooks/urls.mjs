@@ -1,6 +1,6 @@
 import { decode_payload, encode_payload } from './base64.mjs';
 
-export const WEBSITE_BASE_URL = 'middleman.ndrewxie.repl.co';
+export const WEBSITE_BASE_URL = 'passthrough.ndrewxie.repl.co';
 export const WEBSITE_URL = 'https://' + WEBSITE_BASE_URL;
 
 export const IS_ABSOLUTE = /^(?:[a-z+]+:)?\/\//;
