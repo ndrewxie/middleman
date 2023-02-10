@@ -1,7 +1,3 @@
-//MathJax-span-5
-// NOTE - webfont does appear to be loading properly. However, there's a callback that is NOT firing????
-// Or maybe somethign to do with timer or Callback
-
 import { readFileSync, writeFileSync } from 'fs';
 
 import { TextStream, is_whitespace } from './utility.mjs';
